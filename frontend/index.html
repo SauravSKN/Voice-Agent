@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Hindi Voice Agent</title>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <main class="container">
+        <h1>Hindi Voice Agent</h1>
+
+        <p>
+            Press the button, speak one Hindi sentence,
+            and then stop the recording.
+        </p>
+
+        <button id="recordButton" type="button">
+            Start Recording
+        </button>
+
+        <p id="status">
+            Status: Ready
+        </p>
+
+        <button id="clearConversationButton" type="button">
+            New Conversation
+        </button>
+
+        <p id="conversationStatus" role="status">
+            Conversation status: Ready
+        </p>
+
+        <section id="recordingResult" hidden>
+            <h2>Your Recording</h2>
+
+            <audio
+                id="audioPlayer"
+                controls
+            ></audio>
+
+            <button id="uploadButton" type="button">
+                Transcribe Recording
+            </button>
+
+            <button id="voiceAgentButton" type="button">
+                Ask Voice Agent
+            </button>
+
+            <p id="uploadResult" role="status"></p>
+
+            <p id="voiceAgentStatus" role="status">
+                Voice agent status: Ready
+            </p>
+
+            <section id="transcriptResult" hidden>
+                <h2>Hindi Transcript</h2>
+                <p id="transcriptText" lang="hi" dir="auto"></p>
+            </section>
+
+            <section id="voiceAgentResult" hidden>
+                <h2>You said:</h2>
+                <p id="voiceTranscriptText" lang="hi" dir="auto"></p>
+
+                <h2>Assistant:</h2>
+                <p id="voiceResponseText" lang="hi" dir="auto"></p>
+
+                <p id="voiceTiming"></p>
+
+                <audio
+                    id="responseAudioPlayer"
+                    preload="none"
+                ></audio>
+
+                <button id="playResponseButton" type="button" hidden>
+                    Play Response
+                </button>
+
+                <button id="replayResponseButton" type="button" hidden>
+                    Replay Response
+                </button>
+            </section>
+        </section>
+
+        <section id="typedChat">
+            <h2>Typed Hindi Chat</h2>
+
+            <label for="chatInput">
+                Type a Hindi, Hinglish, or English message
+            </label>
+
+            <input
+                id="chatInput"
+                type="text"
+                maxlength="2000"
+                placeholder="जैसे: आप कौन हैं?"
+                autocomplete="off"
+            >
+
+            <button id="chatButton" type="button">
+                Send
+            </button>
+
+            <p id="chatStatus" role="status">
+                Chat status: Ready
+            </p>
+
+            <section id="chatResult" hidden>
+                <h2>Assistant Response</h2>
+                <p id="chatResponse" lang="hi" dir="auto"></p>
+            </section>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>

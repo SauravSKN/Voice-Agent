@@ -1,0 +1,47 @@
+#recordButton {
+    min-width: 170px;
+}
+
+#clearConversationButton {
+    margin-top: 8px;
+}
+
+#recordingResult {
+    margin-top: 28px;
+}
+
+audio {
+    width: 100%;
+    margin-top: 12px;
+}
+#uploadButton,
+#voiceAgentButton {
+    margin-top: 18px;
+}
+
+#voiceAgentResult {
+    margin-top: 24px;
+}
+
+#playResponseButton,
+#replayResponseButton {
+    margin-top: 12px;
+    margin-right: 8px;
+}
+
+#typedChat {
+    margin-top: 32px;
+}
+
+#chatInput {
+    display: block;
+    width: 100%;
+    max-width: 560px;
+    box-sizing: border-box;
+    margin-top: 8px;
+    padding: 8px;
+}
+
+#chatButton {
+    margin-top: 12px;
+}

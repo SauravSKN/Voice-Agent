@@ -1,0 +1,12 @@
+# Runtime dependencies directly imported or required by the backend.
+fastapi==0.139.0
+uvicorn==0.51.0
+python-multipart==0.0.32
+pydantic==2.13.4
+faster-whisper==1.2.1
+ctranslate2==4.8.1
+onnxruntime==1.27.0
+piper-tts==1.4.2
+
+# FastAPI/Starlette TestClient dependency used by backend unit tests.
+httpx==0.28.1

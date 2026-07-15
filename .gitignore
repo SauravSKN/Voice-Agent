@@ -1,0 +1,49 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Private local configuration
+.env
+.env.*
+!.env.example
+
+# Runtime audio and logs
+backend/temporary_audio/*
+!backend/temporary_audio/.gitkeep
+backend/generated_audio/*
+!backend/generated_audio/.gitkeep
+.logs/
+logs/
+*.log
+
+# Downloaded models (obtain them locally; see README)
+backend/models/
+models/
+
+# Audio files are local inputs or generated outputs. Keep only explicit
+# placeholder files allowed by the directory rules above.
+*.wav
+*.webm
+*.mp3
+*.m4a
+*.ogg
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node tooling if added for local test experiments
+node_modules/
