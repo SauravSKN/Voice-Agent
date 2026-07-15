@@ -17,6 +17,7 @@ from app.services.text_to_speech import (
     EmptyTextToSpeechOutputError,
     TextToSpeechGenerationError,
     TextToSpeechModelLoadingError,
+    InvalidTextToSpeechInputError,
 )
 
 
@@ -59,10 +60,19 @@ class FakeTextToSpeechService:
         self.error = error
         self.delay_seconds = delay_seconds
         self.messages = []
+        self.voice_selections = []
         self.settings = SimpleNamespace(timeout_seconds=1.0)
 
-    def generate(self, message):
+    def generate(self, message, voice_selection=None):
         self.messages.append(message)
+        self.voice_selections.append(voice_selection)
+        if voice_selection not in {
+            None,
+            "piper",
+            "indic_parler_divya",
+            "indic_parler_rohit",
+        }:
+            raise InvalidTextToSpeechInputError("invalid voice")
         if self.delay_seconds:
             time.sleep(self.delay_seconds)
         if self.error:
@@ -70,6 +80,16 @@ class FakeTextToSpeechService:
         return SimpleNamespace(
             filename="tts-0123456789abcdef0123456789abcdef.wav",
             generation_time_ms=7,
+            provider=(
+                "indic_parler"
+                if voice_selection == "indic_parler_divya"
+                else "piper"
+            ),
+            voice=(
+                "Divya"
+                if voice_selection == "indic_parler_divya"
+                else "Priyamvada"
+            ),
         )
 
 
@@ -82,6 +102,7 @@ class VoiceResponseEndpointTests(unittest.TestCase):
         speech_service,
         language_model_service,
         text_to_speech_service=None,
+        tts_voice=None,
     ):
         tts_service = text_to_speech_service or FakeTextToSpeechService()
         with (
@@ -110,6 +131,11 @@ class VoiceResponseEndpointTests(unittest.TestCase):
                         "audio/webm",
                     )
                 },
+                data=(
+                    {"tts_voice": tts_voice}
+                    if tts_voice is not None
+                    else None
+                ),
             )
 
     def test_successful_combined_response_and_timing_structure(self):
@@ -132,6 +158,8 @@ class VoiceResponseEndpointTests(unittest.TestCase):
             data["audio_url"],
             "/generated-audio/tts-0123456789abcdef0123456789abcdef.wav",
         )
+        self.assertEqual(data["tts_provider"], "piper")
+        self.assertEqual(data["tts_voice"], "Priyamvada")
         self.assertEqual(
             text_to_speech_service.messages,
             [language_model_service.response],
@@ -151,6 +179,36 @@ class VoiceResponseEndpointTests(unittest.TestCase):
         )
         self.assertTrue(
             all(value >= 0 for value in data["timing"].values())
+        )
+
+    def test_selected_voice_and_actual_provider_are_returned(self):
+        tts_service = FakeTextToSpeechService()
+        response = self.post_audio(
+            FakeSpeechService(),
+            FakeLanguageModelService(),
+            tts_service,
+            tts_voice="indic_parler_divya",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["tts_provider"], "indic_parler")
+        self.assertEqual(response.json()["tts_voice"], "Divya")
+        self.assertEqual(
+            tts_service.voice_selections,
+            ["indic_parler_divya"],
+        )
+
+    def test_invalid_browser_voice_is_rejected(self):
+        response = self.post_audio(
+            FakeSpeechService(),
+            FakeLanguageModelService(),
+            FakeTextToSpeechService(),
+            tts_voice="arbitrary_model",
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["detail"],
+            "The generated response could not be spoken.",
         )
 
     def test_blank_transcript_is_rejected(self):

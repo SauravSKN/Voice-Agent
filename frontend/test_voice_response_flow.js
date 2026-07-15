@@ -63,6 +63,7 @@ const elementIds = [
     "transcriptResult",
     "transcriptText",
     "voiceAgentButton",
+    "ttsVoice",
     "voiceAgentStatus",
     "voiceAgentResult",
     "voiceTranscriptText",
@@ -83,6 +84,7 @@ const elementIds = [
 const elements = Object.fromEntries(
     elementIds.map((id) => [id, new FakeElement()])
 );
+elements.ttsVoice.value = "piper";
 elements.recordButton.textContent = "Start Recording";
 elements.recordingResult.hidden = true;
 elements.transcriptResult.hidden = true;
@@ -143,9 +145,11 @@ global.MediaRecorder = FakeMediaRecorder;
 
 let fetchCalls = 0;
 let finishRequest;
-global.fetch = async (url) => {
+let submittedVoice;
+global.fetch = async (url, options) => {
     fetchCalls += 1;
     assert.equal(url, "http://127.0.0.1:8000/api/voice/respond");
+    submittedVoice = options.body.get("tts_voice");
     return new Promise((resolve) => {
         finishRequest = resolve;
     });
@@ -156,12 +160,14 @@ require("./app.js");
 
 async function run() {
     await elements.recordButton.click();
+    elements.ttsVoice.value = "indic_parler_divya";
     await elements.recordButton.click();
 
     const firstRequest = elements.voiceAgentButton.click();
     await Promise.resolve();
 
     assert.equal(fetchCalls, 1);
+    assert.equal(submittedVoice, "indic_parler_divya");
     assert.equal(elements.voiceAgentButton.disabled, true);
     assert.ok(
         elements.voiceAgentStatus.textHistory.some(
@@ -189,6 +195,8 @@ async function run() {
                 transcript: "भारत की राजधानी क्या है?",
                 response: "भारत की राजधानी नई दिल्ली है।",
                 audio_url: "/generated-audio/tts-0123456789abcdef0123456789abcdef.wav",
+                tts_provider: "indic_parler",
+                tts_voice: "Divya",
                 memory_turns: 1,
                 timing: {
                     transcription_ms: 9200,
@@ -206,6 +214,7 @@ async function run() {
     assert.match(elements.voiceResponseText.textContent, /नई दिल्ली/);
     assert.match(elements.voiceTiming.textContent, /10400 ms/);
     assert.match(elements.voiceTiming.textContent, /Text to speech: 400 ms/);
+    assert.match(elements.voiceTiming.textContent, /indic_parler \/ Divya/);
     assert.match(
         elements.responseAudioPlayer.src,
         /generated-audio\/tts-[0-9a-f]{32}\.wav/

@@ -32,6 +32,20 @@ if ($python) {
     else { Write-Fail "One or more required Python packages could not be imported." }
 }
 
+$indicPython = Join-Path (Get-ProjectRoot) ".venv-indic-parler\Scripts\python.exe"
+$indicRequired = $env:TTS_PROVIDER -eq "indic_parler"
+if (Test-Path -LiteralPath $indicPython -PathType Leaf) {
+    & $indicPython -c "import torch, parler_tts; print(torch.__version__)"
+    if ($LASTEXITCODE -eq 0) { Write-Pass "Isolated Indic Parler dependencies import successfully." }
+    else { Write-Fail "The isolated Indic Parler environment is incomplete." }
+}
+elseif ($indicRequired) {
+    Write-Fail "TTS_PROVIDER=indic_parler, but .venv-indic-parler is missing."
+}
+else {
+    Write-WarningCheck "Indic Parler is optional and its isolated environment is not installed."
+}
+
 if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { Write-Pass "FFmpeg is available on PATH." }
 else { Write-Fail "FFmpeg was not found on PATH." }
 
@@ -93,6 +107,9 @@ $portChecks = @(
     @{Port=5500; Name="frontend"; Url="http://127.0.0.1:5500/"; Text="Hindi Voice Agent"},
     @{Port=11434; Name="Ollama"; Url="http://127.0.0.1:11434/api/tags"; Text="models"}
 )
+if ((Test-Path -LiteralPath $indicPython -PathType Leaf) -or $indicRequired) {
+    $portChecks += @{Port=8002; Name="Indic Parler worker"; Url="http://127.0.0.1:8002/"; Text="Indic Parler service"}
+}
 foreach ($check in $portChecks) {
     if (-not (Test-LocalPortOpen -Port $check.Port)) { Write-Pass "Port $($check.Port) is available for $($check.Name)." }
     elseif (Test-ExpectedHttpService -Url $check.Url -ExpectedText $check.Text) { Write-Pass "Port $($check.Port) is already used by the expected $($check.Name) service." }

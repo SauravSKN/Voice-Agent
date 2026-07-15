@@ -20,7 +20,7 @@ Push-Location $backend
 try {
     Invoke-Checked { & $python -m compileall -q app . } "Python syntax checks"
     Invoke-Checked {
-        & $python -m unittest -v test_speech_to_text_service test_language_model_service test_conversation_memory test_conversation_endpoints test_voice_response_endpoint test_text_to_speech_service test_text_to_speech_endpoint test_health_endpoint
+        & $python -m unittest -v test_speech_to_text_service test_language_model_service test_conversation_memory test_conversation_endpoints test_voice_response_endpoint test_text_to_speech_service test_speech_formatting test_indic_parler_service test_text_to_speech_endpoint test_health_endpoint
     } "Backend fast unit tests"
     Invoke-Checked { & $python -m pip check } "Python dependency check"
 }

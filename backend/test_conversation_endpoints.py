@@ -52,12 +52,14 @@ class FakeTextToSpeechService:
         self.error = None
         self.settings = SimpleNamespace(timeout_seconds=1.0)
 
-    def generate(self, _message):
+    def generate(self, _message, _voice_selection=None):
         if self.error:
             raise self.error
         return SimpleNamespace(
             filename="tts-0123456789abcdef0123456789abcdef.wav",
             generation_time_ms=1,
+            provider="piper",
+            voice="Priyamvada",
         )
 
 

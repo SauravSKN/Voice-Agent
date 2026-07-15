@@ -50,6 +50,7 @@ from app.services.text_to_speech import (
     TextToSpeechModelLoadingError,
     TextToSpeechService,
     TextToSpeechSettings,
+    TextToSpeechTimeoutError,
     default_generated_audio_directory,
     is_safe_audio_filename,
 )
@@ -59,7 +60,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="Hindi Voice Agent API",
     description="Backend API for the Hindi voice-agent project.",
-    version="0.6.0",
+    version="0.7.0",
 )
 
 app.add_middleware(
@@ -84,7 +85,7 @@ def get_language_model_service() -> LanguageModelService:
 
 @lru_cache(maxsize=1)
 def get_text_to_speech_service() -> TextToSpeechService:
-    """Load one local Piper voice for the lifetime of this process."""
+    """Cache one lazy local text-to-speech provider service."""
     return TextToSpeechService()
 
 
@@ -120,6 +121,8 @@ class VoiceAgentResponse(BaseModel):
     transcript: str
     response: str
     audio_url: str
+    tts_provider: str
+    tts_voice: str
     memory_turns: int
     timing: VoiceResponseTiming
 
@@ -296,16 +299,26 @@ def _speech_to_text_health() -> str:
 
 
 def _text_to_speech_health() -> str:
-    """Validate Piper settings and files without loading the voice model."""
+    """Validate settings and provider readiness without loading a model."""
     try:
         settings = TextToSpeechSettings.from_environment()
     except TextToSpeechConfigurationError:
         return "misconfigured"
-    if not settings.model_path.is_file():
-        return "model_missing"
-    if not Path(f"{settings.model_path}.json").is_file():
-        return "config_missing"
-    return "ready"
+    if settings.provider == "piper":
+        if not settings.model_path.is_file():
+            return "model_missing"
+        if not Path(f"{settings.model_path}.json").is_file():
+            return "config_missing"
+        return "ready"
+    try:
+        with urlopen(
+            f"{settings.indic_service_url}/health",
+            timeout=1.0,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        return "ready" if payload.get("status") == "ready" else "unavailable"
+    except (OSError, URLError, ValueError, json.JSONDecodeError):
+        return "unreachable"
 
 
 @app.get("/api/health")
@@ -477,6 +490,7 @@ async def transcribe_audio(
 async def respond_to_voice(
     audio: UploadFile = File(...),
     session_id: str | None = Form(default=None),
+    tts_voice: str | None = Form(default=None, max_length=32),
 ) -> VoiceAgentResponse:
     total_started = time.perf_counter()
     audio_bytes = await _read_audio_upload(
@@ -528,12 +542,18 @@ async def respond_to_voice(
             text_to_speech_service = await run_in_threadpool(
                 get_text_to_speech_service
             )
+            timeout_seconds = (
+                text_to_speech_service.timeout_for_voice(tts_voice)
+                if hasattr(text_to_speech_service, "timeout_for_voice")
+                else text_to_speech_service.settings.timeout_seconds
+            )
             text_to_speech_result = await asyncio.wait_for(
                 asyncio.to_thread(
                     text_to_speech_service.generate,
                     language_model_result.response,
+                    tts_voice,
                 ),
-                timeout=text_to_speech_service.settings.timeout_seconds,
+                timeout=timeout_seconds,
             )
             text_to_speech_ms = round(
                 (time.perf_counter() - text_to_speech_started) * 1000
@@ -616,6 +636,12 @@ async def respond_to_voice(
             status_code=502,
             detail="The response audio could not be generated.",
         ) from error
+    except TextToSpeechTimeoutError as error:
+        logger.exception("The local text-to-speech request timed out.")
+        raise HTTPException(
+            status_code=504,
+            detail="The local text-to-speech request timed out.",
+        ) from error
     except asyncio.TimeoutError as error:
         logger.exception("The local text-to-speech request timed out.")
         raise HTTPException(
@@ -645,6 +671,8 @@ async def respond_to_voice(
         audio_url=(
             f"/generated-audio/{text_to_speech_result.filename}"
         ),
+        tts_provider=text_to_speech_result.provider,
+        tts_voice=text_to_speech_result.voice,
         memory_turns=memory_turns,
         timing=VoiceResponseTiming(
             transcription_ms=transcription_ms,

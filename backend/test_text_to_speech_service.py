@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import time
@@ -8,13 +9,60 @@ from pathlib import Path
 from app.services.text_to_speech import (
     EmptyTextToSpeechOutputError,
     InvalidTextToSpeechInputError,
+    IndicParlerClient,
+    IndicParlerResponse,
     TextToSpeechConfigurationError,
     TextToSpeechGenerationError,
     TextToSpeechModelLoadingError,
     TextToSpeechService,
     TextToSpeechSettings,
+    TextToSpeechTimeoutError,
     is_safe_audio_filename,
 )
+
+
+def make_wav_bytes() -> bytes:
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(22050)
+        wav_file.writeframes(b"\x00\x00" * 100)
+    return output.getvalue()
+
+
+class FakeIndicClient:
+    def __init__(self, *, error=None, audio_bytes=None) -> None:
+        self.error = error
+        self.audio_bytes = audio_bytes or make_wav_bytes()
+        self.calls = []
+
+    def synthesize(self, text, *, speaker):
+        self.calls.append((text, speaker))
+        if self.error:
+            raise self.error
+        return IndicParlerResponse(
+            audio_bytes=self.audio_bytes,
+            model_loading_time_ms=1200,
+            synthesis_time_ms=450,
+            peak_gpu_memory_mb=2048.0,
+            actual_device="cuda",
+        )
+
+
+class FakeHttpResponse:
+    def __init__(self, body: bytes, headers=None) -> None:
+        self.body = body
+        self.headers = headers or {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self) -> bytes:
+        return self.body
 
 
 class FakeVoice:
@@ -218,6 +266,110 @@ class TextToSpeechServiceTests(unittest.TestCase):
         self.assertTrue(old.exists())
         self.assertTrue(newest.exists())
         self.assertTrue(ignored.exists())
+
+    def test_indic_provider_selection_is_lazy_and_returns_metadata(self) -> None:
+        indic_client = FakeIndicClient()
+        factory = VoiceFactory(FakeVoice())
+        service = TextToSpeechService(
+            self.settings(provider="indic_parler"),
+            voice_factory=factory,
+            provider_getter=lambda: ["CPUExecutionProvider"],
+            indic_client=indic_client,
+            output_directory=self.root / "output",
+        )
+
+        result = service.generate(
+            "नमस्ते",
+            "indic_parler_rohit",
+        )
+
+        self.assertEqual([], factory.calls)
+        self.assertEqual(result.provider, "indic_parler")
+        self.assertEqual(result.voice, "Rohit")
+        self.assertEqual(result.generation_time_ms, 450)
+        self.assertEqual(result.model_loading_time_ms, 1200)
+        self.assertEqual(result.peak_gpu_memory_mb, 2048.0)
+        self.assertTrue(indic_client.calls[0][0].endswith("।"))
+
+    def test_invalid_voice_selection_is_rejected(self) -> None:
+        service, _, _ = self.service()
+        with self.assertRaises(InvalidTextToSpeechInputError):
+            service.generate("नमस्ते", "arbitrary_model")
+
+    def test_indic_failure_falls_back_to_piper_only_when_enabled(self) -> None:
+        indic_client = FakeIndicClient(
+            error=TextToSpeechModelLoadingError("unavailable")
+        )
+        factory = VoiceFactory(FakeVoice())
+        fallback_service = TextToSpeechService(
+            self.settings(provider="indic_parler", allow_piper_fallback=True),
+            voice_factory=factory,
+            provider_getter=lambda: ["CPUExecutionProvider"],
+            indic_client=indic_client,
+            output_directory=self.root / "fallback",
+        )
+        result = fallback_service.generate("नमस्ते")
+        self.assertEqual(result.provider, "piper")
+        self.assertEqual([False], factory.calls)
+
+        no_fallback_service = TextToSpeechService(
+            self.settings(provider="indic_parler", allow_piper_fallback=False),
+            voice_factory=VoiceFactory(FakeVoice()),
+            provider_getter=lambda: ["CPUExecutionProvider"],
+            indic_client=indic_client,
+            output_directory=self.root / "no-fallback",
+        )
+        with self.assertRaises(TextToSpeechModelLoadingError):
+            no_fallback_service.generate("नमस्ते")
+
+    def test_indic_invalid_wav_is_rejected_and_removed(self) -> None:
+        service = TextToSpeechService(
+            self.settings(provider="indic_parler", allow_piper_fallback=False),
+            indic_client=FakeIndicClient(audio_bytes=b"not-a-wave"),
+            output_directory=self.root / "invalid-output",
+        )
+        with self.assertRaises(TextToSpeechGenerationError):
+            service.generate("नमस्ते")
+        self.assertEqual([], list(service.output_directory.iterdir()))
+
+    def test_indic_configuration_is_strict(self) -> None:
+        invalid_environments = (
+            {"TTS_PROVIDER": "unknown"},
+            {"INDIC_PARLER_SPEAKER": "Unknown"},
+            {"INDIC_PARLER_MODEL": "arbitrary/model"},
+            {"INDIC_PARLER_SERVICE_URL": "https://example.com:8002"},
+            {
+                "INDIC_PARLER_DEVICE": "cpu",
+                "INDIC_PARLER_DTYPE": "float16",
+            },
+        )
+        for environment in invalid_environments:
+            with self.subTest(environment=environment):
+                with self.assertRaises(TextToSpeechConfigurationError):
+                    TextToSpeechSettings.from_environment(
+                        environment,
+                        base_directory=self.root,
+                    )
+
+    def test_indic_client_rejects_blank_output_and_timeout(self) -> None:
+        blank_client = IndicParlerClient(
+            "http://127.0.0.1:8002",
+            5.0,
+            opener=lambda *_args, **_kwargs: FakeHttpResponse(b""),
+        )
+        with self.assertRaises(EmptyTextToSpeechOutputError):
+            blank_client.synthesize("नमस्ते", speaker="Divya")
+
+        def timeout_opener(*_args, **_kwargs):
+            raise TimeoutError("slow")
+
+        timeout_client = IndicParlerClient(
+            "http://127.0.0.1:8002",
+            0.01,
+            opener=timeout_opener,
+        )
+        with self.assertRaises(TextToSpeechTimeoutError):
+            timeout_client.synthesize("नमस्ते", speaker="Divya")
 
 
 if __name__ == "__main__":

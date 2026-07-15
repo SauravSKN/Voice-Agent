@@ -28,6 +28,19 @@ if (-not (Test-ExpectedHttpService -Url "http://127.0.0.1:11434/api/tags" -Expec
 & (Join-Path $PSScriptRoot "check_setup.ps1")
 if ($LASTEXITCODE -ne 0) { throw "Setup checks failed. Fix the FAIL messages above; no existing process was stopped." }
 
+$indicPython = Join-Path (Get-ProjectRoot) ".venv-indic-parler\Scripts\python.exe"
+if (Test-Path -LiteralPath $indicPython -PathType Leaf) {
+    if (-not (Test-LocalPortOpen -Port 8002)) {
+        Start-ScriptWindow "Hindi Voice Agent - Indic Parler" (Join-Path $PSScriptRoot "start_indic_parler.ps1")
+    }
+    elseif (-not (Test-ExpectedHttpService -Url "http://127.0.0.1:8002/" -ExpectedText "Indic Parler service")) {
+        throw "Port 8002 is occupied by an unexpected service."
+    }
+    $indicDeadline = (Get-Date).AddSeconds(30)
+    while ((Get-Date) -lt $indicDeadline -and -not (Test-ExpectedHttpService -Url "http://127.0.0.1:8002/health" -ExpectedText "ready")) { Start-Sleep -Milliseconds 500 }
+    if (-not (Test-ExpectedHttpService -Url "http://127.0.0.1:8002/health" -ExpectedText "ready")) { throw "Indic Parler worker did not become ready within 30 seconds. Check its window." }
+}
+
 if (-not (Test-LocalPortOpen -Port 8000)) { Start-ScriptWindow "Hindi Voice Agent - Backend" (Join-Path $PSScriptRoot "start_backend.ps1") }
 elseif (-not (Test-ExpectedHttpService -Url "http://127.0.0.1:8000/" -ExpectedText "Hindi Voice Agent backend")) { throw "Port 8000 is occupied by an unexpected service." }
 
@@ -40,5 +53,6 @@ elseif (-not (Test-ExpectedHttpService -Url "http://127.0.0.1:5500/" -ExpectedTe
 
 Write-Host "`nHindi Voice Agent is starting locally." -ForegroundColor Green
 Write-Host "Frontend: http://127.0.0.1:5500/"
+if (Test-Path -LiteralPath $indicPython -PathType Leaf) { Write-Host "Indic Parler worker: http://127.0.0.1:8002/" }
 Write-Host "Stop services safely with Ctrl+C in the windows started by this script."
 Write-Host "This script never stops processes that were already running."

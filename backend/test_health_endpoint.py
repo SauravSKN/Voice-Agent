@@ -112,6 +112,41 @@ class HealthEndpointTests(unittest.TestCase):
         )
         self.assertNotIn(str(private_model_path), response.text)
 
+    def test_indic_health_checks_worker_without_loading_model(self):
+        environment = {
+            "TTS_PROVIDER": "indic_parler",
+            "LLM_MODEL": "qwen3:4b-instruct",
+            "LLM_BASE_URL": "http://127.0.0.1:11434",
+        }
+
+        def fake_open(url, timeout):
+            if str(url).endswith("/api/tags"):
+                return FakeResponse(
+                    {"models": [{"name": "qwen3:4b-instruct"}]}
+                )
+            if str(url).endswith("/health"):
+                return FakeResponse(
+                    {"status": "ready", "model_loaded": False}
+                )
+            raise AssertionError(f"Unexpected URL: {url}")
+
+        with (
+            patch.dict(os.environ, environment, clear=True),
+            patch.object(main_module, "urlopen", side_effect=fake_open),
+            patch.object(
+                main_module,
+                "get_text_to_speech_service",
+                side_effect=AssertionError("TTS model must not load"),
+            ),
+        ):
+            response = self.client.get("/api/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["services"]["text_to_speech"],
+            "ready",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

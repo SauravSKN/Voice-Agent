@@ -1,6 +1,6 @@
 # Hindi Voice Agent
 
-A local Windows prototype that records Hindi speech in a browser, transcribes it with Faster-Whisper, sends the text and temporary conversation history to a local Ollama Qwen3 model, synthesizes the reply with Piper, and plays the WAV response in the browser. Typed Hindi/Hinglish/English chat uses the same per-tab conversation.
+A local Windows prototype that records Hindi speech in a browser, transcribes it with Faster-Whisper, sends the text and temporary conversation history to a local Ollama Qwen3 model, synthesizes the reply with Piper or the optional isolated Indic Parler provider, and plays the WAV response in the browser. Typed Hindi/Hinglish/English chat uses the same per-tab conversation.
 
 Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, database, authentication, streaming, or persistent conversation store is included.
 
@@ -10,7 +10,7 @@ Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, databa
 - Show a conservative Hindi transcript.
 - Generate short local responses with `qwen3:4b-instruct`.
 - Remember up to six completed turns per browser tab by default.
-- Speak and replay the response with Piper Hindi TTS.
+- Speak and replay the response with default Piper Hindi TTS or optional Indic Parler Divya/Rohit.
 - Clear the current tab's conversation.
 - Run fast mocked tests separately from real model-dependent integration tests.
 
@@ -60,6 +60,16 @@ ollama pull qwen3:4b-instruct
 ```
 
 The Piper command downloads both `hi_IN-priyamvada-medium.onnx` and `hi_IN-priyamvada-medium.onnx.json`. The voice files are intentionally ignored by Git because this selected voice's model card identifies its dataset licence as **CC BY-NC-SA 4.0**. Review [docs/licenses.md](docs/licenses.md) before redistributing or using it.
+
+Optional Indic Parler setup is isolated from the stable environment:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_indic_parler.ps1
+Start-Process https://huggingface.co/ai4bharat/indic-parler-tts
+& .\.venv-indic-parler\Scripts\hf.exe auth login
+```
+
+Accept the gated model terms in the opened page before authenticating. No model file, token, virtual environment, or generated WAV belongs in Git.
 
 Validate the machine without installing or changing anything:
 
@@ -115,11 +125,15 @@ To start components in separate terminals instead:
 # Terminal 1 (start Ollama only if it is not already running)
 ollama serve
 
-# Terminal 2
+# Terminal 2 (optional natural voice worker)
+Set-Location .\hindi-voice-agent
+powershell -ExecutionPolicy Bypass -File .\scripts\start_indic_parler.ps1
+
+# Terminal 3
 Set-Location .\hindi-voice-agent
 powershell -ExecutionPolicy Bypass -File .\scripts\start_backend.ps1
 
-# Terminal 3
+# Terminal 4
 Set-Location .\hindi-voice-agent
 powershell -ExecutionPolicy Bypass -File .\scripts\start_frontend.ps1
 ```

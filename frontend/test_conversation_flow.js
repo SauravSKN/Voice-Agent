@@ -53,6 +53,7 @@ const elementIds = [
     "transcriptResult",
     "transcriptText",
     "voiceAgentButton",
+    "ttsVoice",
     "voiceAgentStatus",
     "voiceAgentResult",
     "voiceTranscriptText",
@@ -73,6 +74,7 @@ const elementIds = [
 const elements = Object.fromEntries(
     elementIds.map((id) => [id, new FakeElement()])
 );
+elements.ttsVoice.value = "piper";
 elements.recordButton.textContent = "Start Recording";
 elements.recordingResult.hidden = true;
 elements.transcriptResult.hidden = true;

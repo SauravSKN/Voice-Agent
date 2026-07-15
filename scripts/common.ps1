@@ -48,6 +48,14 @@ function Get-ProjectPython {
     return $python
 }
 
+function Get-IndicParlerPython {
+    $python = Join-Path $script:ProjectRoot ".venv-indic-parler\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
+        throw "Indic Parler environment not found. Run .\scripts\install_indic_parler.ps1 first."
+    }
+    return $python
+}
+
 function Test-LocalPortOpen {
     param([Parameter(Mandatory = $true)][int]$Port)
     $client = [System.Net.Sockets.TcpClient]::new()

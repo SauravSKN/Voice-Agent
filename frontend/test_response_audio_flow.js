@@ -57,6 +57,7 @@ const elementIds = [
     "transcriptResult",
     "transcriptText",
     "voiceAgentButton",
+    "ttsVoice",
     "voiceAgentStatus",
     "voiceAgentResult",
     "voiceTranscriptText",
@@ -77,6 +78,7 @@ const elementIds = [
 const elements = Object.fromEntries(
     elementIds.map((id) => [id, new FakeElement()])
 );
+elements.ttsVoice.value = "piper";
 elements.recordButton.textContent = "Start Recording";
 elements.recordingResult.hidden = true;
 elements.transcriptResult.hidden = true;
@@ -154,6 +156,8 @@ global.fetch = async (url) => {
                 response: "भारत की राजधानी नई दिल्ली है।",
                 audio_url:
                     "/generated-audio/tts-0123456789abcdef0123456789abcdef.wav",
+                tts_provider: "piper",
+                tts_voice: "Priyamvada",
                 memory_turns: 1,
                 timing: {
                     transcription_ms: 3000,

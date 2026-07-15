@@ -58,6 +58,7 @@ const audioPlayer = document.getElementById("audioPlayer");
 const transcriptResult = document.getElementById("transcriptResult");
 const transcriptText = document.getElementById("transcriptText");
 const voiceAgentButton = document.getElementById("voiceAgentButton");
+const ttsVoice = document.getElementById("ttsVoice");
 const voiceAgentStatus = document.getElementById("voiceAgentStatus");
 const voiceAgentResult = document.getElementById("voiceAgentResult");
 const voiceTranscriptText = document.getElementById("voiceTranscriptText");
@@ -331,6 +332,7 @@ async function askVoiceAgent() {
         "recording.webm"
     );
     formData.append("session_id", conversationSessionId);
+    formData.append("tts_voice", ttsVoice.value);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(
@@ -379,6 +381,7 @@ async function askVoiceAgent() {
         voiceTranscriptText.textContent = data.transcript;
         voiceResponseText.textContent = data.response;
         voiceTiming.textContent =
+            `Voice: ${data.tts_provider} / ${data.tts_voice} · ` +
             `Transcription: ${data.timing.transcription_ms} ms · ` +
             `Language model: ${data.timing.language_model_ms} ms · ` +
             `Text to speech: ${data.timing.text_to_speech_ms} ms · ` +

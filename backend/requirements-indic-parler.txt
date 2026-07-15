@@ -1,0 +1,7 @@
+# Install PyTorch first with scripts/install_indic_parler.ps1 so this file
+# reuses the single CUDA-enabled wheel set instead of resolving another build.
+fastapi==0.139.0
+uvicorn==0.51.0
+pydantic==2.13.4
+numpy==1.26.4
+parler-tts @ git+https://github.com/huggingface/parler-tts.git@d108732cd57788ec86bc857d99a6cabd66663d68
