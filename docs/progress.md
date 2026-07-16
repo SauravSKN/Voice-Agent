@@ -1,6 +1,6 @@
 # Project progress
 
-Last reviewed: 2026-07-15.
+Last reviewed: 2026-07-16.
 
 ## Completed milestones
 
@@ -11,10 +11,11 @@ Last reviewed: 2026-07-15.
 - Piper `hi_IN-priyamvada-medium` CPU TTS, safe generated-audio serving, replay, TTL cleanup, and file-count cap.
 - Mocked backend endpoint/service tests and frontend Node tests.
 - Stabilization package: environment template, pinned direct dependencies, Git exclusions, setup/start/test scripts, lightweight health diagnostics, and documentation.
+- Focused doctor appointment milestone: synthetic doctor directory, SQLite repositories/seed data, atomic booking/rescheduling/cancellation, safe references, controlled tools, deterministic Hindi dialogue, a medical-safety boundary, separate temporary workflow state, REST APIs, form UI, and typed/voice state sharing.
 
 ## Intentionally not included
 
-No additional AI models, TTS engines, streaming, WebSockets, database, authentication, phone integration, cloud deployment, or external agent tools were added during stabilization.
+No additional AI models, TTS engines, streaming, WebSockets, authentication, payments, insurance, prescriptions, real hospital/patient data, phone integration, cloud deployment, or external agent tools were added for this milestone.
 
 ## Remaining manual decisions
 
@@ -29,3 +30,4 @@ No additional AI models, TTS engines, streaming, WebSockets, database, authentic
 - Model-dependent Whisper, Ollama, conversation, Piper, voice-response, and spoken-memory integrations have passed locally with a developer-supplied fixture.
 - The private recording, its transcript, generated audio, downloaded models, and machine-specific benchmark timings are intentionally excluded from the public repository.
 - Frontend DOM flows and live local HTTP integrations have passed; no browser screenshot or browser-profile data is included.
+- On 2026-07-16, 94 backend fast tests and all 6 frontend test files passed. A live synthetic flow booked, looked up, rescheduled, rejected a double booking, rejected a nonexistent slot, cancelled, refused diagnosis/dosage, and cleared the session.

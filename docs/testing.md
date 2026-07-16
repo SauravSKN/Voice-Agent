@@ -7,7 +7,7 @@ Set-Location .\hindi-voice-agent
 powershell -ExecutionPolicy Bypass -File .\scripts\run_tests.ps1
 ```
 
-This performs Python compile checks; mocked unit/endpoint tests for STT configuration and cleanup, Ollama requests and errors, conversation memory, voice responses, Piper output/cleanup, generated-audio routing, and health; `pip check`; JavaScript syntax; and all frontend Node tests. It neither starts services nor downloads/loads real models.
+This performs Python compile checks; mocked unit/endpoint tests for STT configuration and cleanup, Ollama requests and errors, conversation memory, voice responses, Piper output/cleanup, generated-audio routing, health, appointment repositories/services, concurrency, dialogue, REST APIs, and typed/voice workflow sharing; `pip check`; JavaScript syntax; and all frontend Node tests. It neither starts services nor downloads/loads real models.
 
 ## Explicit integration suite
 
@@ -34,3 +34,9 @@ The private WebM fixture is intentionally not included in a shared repository. I
 6. Send a typed follow-up that depends on prior context.
 7. Start a new conversation and confirm old context is gone.
 8. Check `/api/health` and confirm no paths or private data appear.
+9. Search Dermatology + Pune + In person, choose Dr. Neha Sharma, load a future date, select a verified slot, and create a fictional booking.
+10. Confirm reference display, lookup, reschedule, cancellation, and UI reset.
+11. Attempt a second booking for the occupied slot and verify HTTP 409; request a nonexistent slot and verify HTTP 404.
+12. Ask for diagnosis or dosage and verify a refusal; describe an apparent emergency and verify urgent-care guidance without diagnosis.
+
+Appointment tests use temporary SQLite files and synthetic identities. They assert that concurrent booking has one winner, failed rescheduling preserves the original slot, cancellation releases a slot, unsafe references and invalid phone numbers are rejected, the LLM is not called for verified appointment facts, and New Conversation clears both memory stores.

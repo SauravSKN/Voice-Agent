@@ -1,8 +1,8 @@
-# Hindi Voice Agent
+# Hindi Doctor Appointment Voice Assistant
 
-A local Windows prototype that records Hindi speech in a browser, transcribes it with Faster-Whisper, sends the text and temporary conversation history to a local Ollama Qwen3 model, synthesizes the reply with Piper, and plays the WAV response in the browser. Typed Hindi/Hinglish/English chat uses the same per-tab conversation.
+A local Windows demonstration assistant that can search fictional doctors, check verified SQLite availability, and book, look up, reschedule, or cancel demo appointments through typed Hindi/Hinglish/English, microphone input, or forms. General chat still uses local Ollama Qwen3; appointment facts and state changes come only from controlled database tools. Piper speaks voice responses.
 
-Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, database, authentication, streaming, or persistent conversation store is included.
+Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, authentication, payments, production patient records, streaming, or permanent patient account is included. This is not a medical service and does not diagnose, prescribe, or interpret reports.
 
 ## What it can do
 
@@ -12,6 +12,10 @@ Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, databa
 - Remember up to six completed turns per browser tab by default.
 - Speak and replay the response with Piper Hindi TTS.
 - Clear the current tab's conversation.
+- Search 9 active fictional doctors across 8 specialities.
+- Check database-backed availability and atomically create demo appointments.
+- Look up, reschedule, and cancel by reference plus demo phone number.
+- Keep appointment workflow state bounded, temporary, session-specific, and separate from ordinary chat history.
 - Run fast mocked tests separately from real model-dependent integration tests.
 
 ## Architecture
@@ -20,14 +24,19 @@ Everything is bound to `127.0.0.1` by the supplied scripts. No cloud API, databa
 flowchart LR
     B["Browser + MediaRecorder"] -->|"WebM over loopback"| A["FastAPI :8000"]
     A --> W["Faster-Whisper medium"]
-    W --> M["Temporary conversation memory"]
+    W --> R{"Appointment request?"}
+    R -->|"yes"| T["Controlled appointment tools"]
+    T --> D["SQLite demo doctors, slots, bookings"]
+    R -->|"no"| M["Temporary conversation memory"]
     M --> O["Ollama qwen3:4b-instruct :11434"]
-    O --> P["Piper hi_IN-priyamvada medium"]
+    D --> P["Piper hi_IN-priyamvada medium"]
+    O --> P
     P -->|"Generated WAV"| A
     A -->|"JSON + local audio URL"| B
 ```
 
 See [docs/architecture.md](docs/architecture.md) for endpoint and lifecycle details.
+See [docs/appointment-system.md](docs/appointment-system.md) for the schema, API, rules, dialogue flow, and demo limitations.
 
 ## Stack and requirements
 
@@ -75,6 +84,13 @@ Detailed setup and clean-room notes are in [docs/setup.md](docs/setup.md).
 ## Configuration
 
 Copy `.env.example` to `.env` and edit only local values. `.env` is ignored by Git. The PowerShell scripts parse it directly, so `python-dotenv` is not needed. A variable already set in the current PowerShell process takes precedence over `.env`; application defaults apply when neither exists.
+
+Appointment storage defaults to `backend/data/appointments-demo.sqlite3`. Override it for an isolated demo or test without hardcoding a machine path:
+
+```text
+APPOINTMENT_DB_PATH=data/appointments-demo.sqlite3
+APPOINTMENT_DB_TIMEOUT_SECONDS=5
+```
 
 CPU STT defaults:
 
@@ -133,6 +149,7 @@ All supplied servers bind only to `127.0.0.1`.
 3. Select **Transcribe Recording** for STT only, or **Ask Voice Agent** for the complete STT → LLM → TTS flow.
 4. If browser autoplay is blocked, select **Play Response**. Use **Replay Response** to hear it again.
 5. Typed chat shares the same temporary tab session. **New Conversation** clears that server-side session and rotates the tab identifier.
+6. For appointments, use the focused form or say/type `मुझे कल किसी त्वचा रोग विशेषज्ञ से अपॉइंटमेंट चाहिए।` The assistant asks for one missing field at a time and confirms only after SQLite commits the booking.
 
 Conversation data is process-local and temporary. A backend restart clears all memory. Audio bytes are never stored in conversation memory. Upload files are deleted after each request. Generated response WAVs are automatically removed by age and file-count limits (60 minutes and 50 files by default).
 
@@ -166,7 +183,7 @@ Use `scripts/check_setup.ps1` for detailed local diagnostics. It is read-only an
 
 The browser sends recordings and chat text over local loopback to FastAPI. FastAPI contacts the configured loopback Ollama server. Temporary upload files are deleted after processing; generated WAVs remain briefly on disk until cleanup. Conversation text stays in backend memory until clear, expiry, eviction, or restart. Browser session storage keeps only a random session ID. See [docs/privacy.md](docs/privacy.md); this architecture reduces external transfer but is not an absolute privacy guarantee.
 
-Current limitations include no authentication, multi-user isolation beyond random session IDs, persistence, streaming, WebSockets, cloud deployment, mobile/phone integration, or production hardening. Hindi/Hinglish transcription quality varies with accent, microphone quality, background noise, code-switching, and Whisper model behavior; the conservative cleanup rules correct only a few known phrases. `qwen3:4b-instruct` can produce incorrect, awkward, mixed-language, or unsupported Hindi answers. The app is intended for local development only.
+Current limitations include no authentication, patient accounts, production healthcare compliance, multi-user authorization, streaming, WebSockets, cloud deployment, mobile/phone integration, or production hardening. SQLite appointments persist locally for the demo; conversation and workflow memory remain temporary. Hindi/Hinglish transcription quality varies with accent, microphone quality, background noise, code-switching, and Whisper model behavior; the conservative cleanup rules correct only a few known phrases. `qwen3:4b-instruct` can produce incorrect, awkward, mixed-language, or unsupported Hindi answers. The app is intended for local development only.
 
 ## Troubleshooting
 
@@ -194,3 +211,4 @@ Before sharing, exclude `.venv`, `.env`, model binaries, temporary recordings an
 - [Privacy](docs/privacy.md)
 - [Licences](docs/licenses.md)
 - [Milestone progress](docs/progress.md)
+- [Appointment system](docs/appointment-system.md)

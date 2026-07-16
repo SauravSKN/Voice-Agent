@@ -13,6 +13,7 @@ This local architecture reduces the need to send content to an application cloud
 - Conversation memory stores only completed user/assistant text turns, timestamps, and session association.
 - Audio bytes and file paths are not stored in conversation memory.
 - Sessions expire after inactivity, can be evicted by the maximum-session cap, can be cleared by the endpoint, and all disappear on backend restart.
+- Appointment workflow fields use a separate bounded in-memory store under the same random session ID. They expire and are cleared with **New Conversation**.
 
 ## Disk
 
@@ -21,6 +22,8 @@ This local architecture reduces the need to send content to an application cloud
 - Piper response WAV files are written to `backend/generated_audio`. Cleanup removes expired files and enforces a maximum count (60 minutes and 50 files by default).
 - Model files, `.env`, the virtual environment, and normal software/model caches remain on disk until manually removed.
 - Ollama stores its model blobs outside this repository according to its installation settings.
+- The local SQLite demo database stores only appointment reference, fictional patient name, normalized phone, optional age, doctor, date/time, mode, a short optional reason, status, and timestamps.
+- SQLite does not store audio, transcripts, diagnosis, prescriptions, medical history, identity documents, insurance, or payment details. Runtime databases and journals are ignored by Git.
 
 ## Network
 
@@ -30,3 +33,5 @@ This local architecture reduces the need to send content to an application cloud
 - Piper and Faster-Whisper inference run in the backend process. First-time Whisper/model tooling may access model sources when a model is not already cached; ordinary requests do not intentionally call a cloud API.
 
 The supplied scripts do not bind public interfaces. Because the prototype has no authentication and permissive CORS, do not expose it to a LAN or the internet.
+
+This demonstration is not a compliant production medical platform. Production would require authenticated users and staff, authorization, consent, encryption and key management, audit controls, retention/deletion policy, backups, availability controls, jurisdiction-specific legal review, and integration with an approved scheduling source of truth.

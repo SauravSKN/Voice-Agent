@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from contextlib import contextmanager
+from datetime import date
 from functools import lru_cache
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -11,14 +12,39 @@ from urllib.error import URLError
 from urllib.request import urlopen
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from app.appointments.dialogue import AppointmentAssistant
+from app.appointments.models import (
+    AppointmentCancelRequest,
+    AppointmentCreateRequest,
+    AppointmentRescheduleRequest,
+    AppointmentResponse,
+    AvailabilityResponse,
+    DoctorListResponse,
+    DoctorResponse,
+    SpecialityListResponse,
+)
+from app.appointments.service import (
+    AppointmentError,
+    AppointmentNotFoundError,
+    AppointmentService,
+    AppointmentValidationError,
+    DoctorNotFoundError,
+    InvalidAppointmentStateError,
+    SlotNotFoundError,
+    SlotUnavailableError,
+)
+from app.appointments.tools import AppointmentTools
+
 from app.memory import (
+    AppointmentWorkflowStore,
     ConversationConfigurationError,
     ConversationStore,
     InvalidSessionIdError,
@@ -29,6 +55,7 @@ from app.services.language_model import (
     InvalidLanguageModelInputError,
     LanguageModelConfigurationError,
     LanguageModelSettings,
+    LanguageModelResult,
     LanguageModelService,
     LanguageModelTimeoutError,
     ModelLoadingError,
@@ -57,9 +84,12 @@ from app.services.text_to_speech import (
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Hindi Voice Agent API",
-    description="Backend API for the Hindi voice-agent project.",
-    version="0.6.0",
+    title="Hindi Doctor Appointment Assistant API",
+    description=(
+        "Demonstration Hindi appointment assistant. It does not provide "
+        "medical diagnosis or treatment."
+    ),
+    version="1.0.0",
 )
 
 app.add_middleware(
@@ -94,6 +124,27 @@ def get_conversation_store() -> ConversationStore:
     return ConversationStore()
 
 
+@lru_cache(maxsize=1)
+def get_appointment_workflow_store() -> AppointmentWorkflowStore:
+    """Create appointment state without opening the appointment database."""
+    return AppointmentWorkflowStore()
+
+
+@lru_cache(maxsize=1)
+def get_appointment_service() -> AppointmentService:
+    """Initialize the structured demo database lazily."""
+    return AppointmentService()
+
+
+@lru_cache(maxsize=1)
+def get_appointment_assistant() -> AppointmentAssistant:
+    """Share one bounded workflow store and strict tool allowlist."""
+    return AppointmentAssistant(
+        tools=AppointmentTools(get_appointment_service()),
+        store=get_appointment_workflow_store(),
+    )
+
+
 class ChatRequest(BaseModel):
     message: str = Field(max_length=2000)
     session_id: str | None = None
@@ -105,6 +156,8 @@ class ChatResponse(BaseModel):
     response: str
     generation_time_ms: int
     memory_turns: int
+    appointment_state: dict | None = None
+    appointment: dict | None = None
 
 
 class VoiceResponseTiming(BaseModel):
@@ -122,6 +175,8 @@ class VoiceAgentResponse(BaseModel):
     audio_url: str
     memory_turns: int
     timing: VoiceResponseTiming
+    appointment_state: dict | None = None
+    appointment: dict | None = None
 
 
 class ClearConversationRequest(BaseModel):
@@ -143,25 +198,56 @@ async def _generate_with_memory(
         conversation_store.validate_session_id,
         resolved_session_id,
     )
-    history = await run_in_threadpool(
-        conversation_store.get_history,
+    workflow_store = await run_in_threadpool(get_appointment_workflow_store)
+    workflow_state = await run_in_threadpool(
+        workflow_store.get,
         resolved_session_id,
     )
-    language_model_service = await run_in_threadpool(
-        get_language_model_service
-    )
-    result = await run_in_threadpool(
-        language_model_service.generate,
-        user_text,
-        history=history,
-    )
+    appointment_result = None
+    if workflow_state or AppointmentAssistant.is_relevant(user_text):
+        appointment_assistant = await run_in_threadpool(
+            get_appointment_assistant
+        )
+        appointment_result = await run_in_threadpool(
+            appointment_assistant.handle,
+            user_text,
+            resolved_session_id,
+        )
+    appointment_state = None
+    appointment = None
+    if appointment_result is not None:
+        result = LanguageModelResult(
+            response=appointment_result.response,
+            generation_time_ms=appointment_result.generation_time_ms,
+        )
+        appointment_state = appointment_result.appointment_state
+        appointment = appointment_result.appointment
+    else:
+        history = await run_in_threadpool(
+            conversation_store.get_history,
+            resolved_session_id,
+        )
+        language_model_service = await run_in_threadpool(
+            get_language_model_service
+        )
+        result = await run_in_threadpool(
+            language_model_service.generate,
+            user_text,
+            history=history,
+        )
     memory_turns = await run_in_threadpool(
         conversation_store.add_turn,
         resolved_session_id,
         user_text,
         result.response,
     )
-    return result, resolved_session_id, memory_turns
+    return (
+        result,
+        resolved_session_id,
+        memory_turns,
+        appointment_state,
+        appointment,
+    )
 
 
 async def _read_audio_upload(
@@ -255,7 +341,7 @@ async def validation_exception_handler(
 
     return JSONResponse(
         status_code=422,
-        content={"detail": error.errors()},
+        content={"detail": jsonable_encoder(error.errors())},
     )
 
 
@@ -352,13 +438,185 @@ async def generated_audio(filename: str) -> FileResponse:
     )
 
 
+async def _run_appointment_operation(operation, *args, **kwargs):
+    try:
+        return await asyncio.wait_for(
+            run_in_threadpool(operation, *args, **kwargs),
+            timeout=AppointmentTools.timeout_seconds,
+        )
+    except (DoctorNotFoundError, SlotNotFoundError, AppointmentNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (SlotUnavailableError, InvalidAppointmentStateError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except AppointmentValidationError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except asyncio.TimeoutError as error:
+        raise HTTPException(
+            status_code=504,
+            detail="The appointment operation timed out.",
+        ) from error
+    except AppointmentError as error:
+        logger.exception("Appointment operation failed.")
+        raise HTTPException(
+            status_code=500,
+            detail="The appointment operation failed.",
+        ) from error
+
+
+async def _record_appointment_workflow(
+    session_id: str | None,
+    appointment: dict,
+    phase: str,
+) -> None:
+    if not session_id:
+        return
+    store = await run_in_threadpool(get_appointment_workflow_store)
+    await run_in_threadpool(
+        store.replace,
+        session_id,
+        {
+            "intent": "manage_appointment",
+            "phase": phase,
+            "appointment_reference": appointment["appointment_reference"],
+            "appointment": appointment,
+        },
+    )
+@app.get("/api/specialities", response_model=SpecialityListResponse)
+async def list_specialities() -> SpecialityListResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    values = await _run_appointment_operation(service.list_specialities)
+    return SpecialityListResponse(specialities=values)
+
+
+@app.get("/api/doctors", response_model=DoctorListResponse)
+async def list_doctors(
+    speciality: str | None = Query(default=None, max_length=80),
+    location: str | None = Query(default=None, max_length=80),
+    consultation_mode: str | None = Query(default=None, max_length=16),
+) -> DoctorListResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    doctors = await _run_appointment_operation(
+        service.search_doctors,
+        speciality=speciality,
+        location=location,
+        consultation_mode=consultation_mode,
+    )
+    return DoctorListResponse(doctors=doctors)
+
+
+@app.get("/api/doctors/{doctor_id}", response_model=DoctorResponse)
+async def doctor_details(doctor_id: str) -> DoctorResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    doctor = await _run_appointment_operation(service.get_doctor, doctor_id)
+    return DoctorResponse(**doctor)
+
+
+@app.get(
+    "/api/doctors/{doctor_id}/availability",
+    response_model=AvailabilityResponse,
+)
+async def doctor_availability(
+    doctor_id: str,
+    appointment_date: date = Query(alias="date"),
+) -> AvailabilityResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    slots = await _run_appointment_operation(
+        service.get_available_slots,
+        doctor_id,
+        appointment_date,
+    )
+    return AvailabilityResponse(
+        doctor_id=doctor_id.upper(),
+        date=appointment_date,
+        slots=slots,
+    )
+
+
+@app.post("/api/appointments", response_model=AppointmentResponse)
+async def create_appointment(
+    request: AppointmentCreateRequest,
+) -> AppointmentResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    appointment = await _run_appointment_operation(service.book, request)
+    await _record_appointment_workflow(
+        request.session_id,
+        appointment,
+        "confirmed",
+    )
+    return AppointmentResponse(**appointment)
+
+
+@app.get(
+    "/api/appointments/{reference}",
+    response_model=AppointmentResponse,
+)
+async def lookup_appointment(
+    reference: str,
+    phone: str = Query(min_length=10, max_length=20),
+) -> AppointmentResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    appointment = await _run_appointment_operation(
+        service.lookup,
+        reference,
+        phone,
+    )
+    return AppointmentResponse(**appointment)
+
+
+@app.post(
+    "/api/appointments/{reference}/reschedule",
+    response_model=AppointmentResponse,
+)
+async def reschedule_appointment(
+    reference: str,
+    request: AppointmentRescheduleRequest,
+) -> AppointmentResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    appointment = await _run_appointment_operation(
+        service.reschedule,
+        reference,
+        request,
+    )
+    await _record_appointment_workflow(
+        request.session_id,
+        appointment,
+        "confirmed",
+    )
+    return AppointmentResponse(**appointment)
+
+
+@app.post(
+    "/api/appointments/{reference}/cancel",
+    response_model=AppointmentResponse,
+)
+async def cancel_appointment(
+    reference: str,
+    request: AppointmentCancelRequest,
+) -> AppointmentResponse:
+    service = await run_in_threadpool(get_appointment_service)
+    appointment = await _run_appointment_operation(
+        service.cancel,
+        reference,
+        request.patient_phone,
+    )
+    await _record_appointment_workflow(
+        request.session_id,
+        appointment,
+        "cancelled",
+    )
+    return AppointmentResponse(**appointment)
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     try:
-        result, session_id, memory_turns = await _generate_with_memory(
-            request.message,
-            request.session_id,
-        )
+        (
+            result,
+            session_id,
+            memory_turns,
+            appointment_state,
+            appointment,
+        ) = await _generate_with_memory(request.message, request.session_id)
     except InvalidSessionIdError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ConversationConfigurationError as error:
@@ -406,6 +664,8 @@ async def chat(request: ChatRequest) -> ChatResponse:
         response=result.response,
         generation_time_ms=result.generation_time_ms,
         memory_turns=memory_turns,
+        appointment_state=appointment_state,
+        appointment=appointment,
     )
 
 
@@ -419,6 +679,14 @@ async def clear_conversation(
     try:
         store = await run_in_threadpool(get_conversation_store)
         cleared = await run_in_threadpool(store.clear, request.session_id)
+        appointment_store = await run_in_threadpool(
+            get_appointment_workflow_store
+        )
+        appointment_cleared = await run_in_threadpool(
+            appointment_store.clear,
+            request.session_id,
+        )
+        cleared = cleared or appointment_cleared
     except InvalidSessionIdError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except ConversationConfigurationError as error:
@@ -516,6 +784,8 @@ async def respond_to_voice(
                 language_model_result,
                 resolved_session_id,
                 memory_turns,
+                appointment_state,
+                appointment,
             ) = await _generate_with_memory(
                 transcript,
                 resolved_session_id,
@@ -646,6 +916,8 @@ async def respond_to_voice(
             f"/generated-audio/{text_to_speech_result.filename}"
         ),
         memory_turns=memory_turns,
+        appointment_state=appointment_state,
+        appointment=appointment,
         timing=VoiceResponseTiming(
             transcription_ms=transcription_ms,
             language_model_ms=language_model_ms,

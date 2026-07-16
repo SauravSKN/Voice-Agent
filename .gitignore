@@ -1,5 +1,6 @@
 # Python
 .venv/
+.venv-indic-parler/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -47,3 +48,12 @@ desktop.ini
 
 # Node tooling if added for local test experiments
 node_modules/
+
+# Local demonstration databases. Schema and synthetic seed code are tracked;
+# runtime appointments are not.
+backend/data/*.sqlite3
+backend/data/*.sqlite3-*
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-*

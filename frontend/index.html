@@ -117,6 +117,197 @@
                 <p id="chatResponse" lang="hi" dir="auto"></p>
             </section>
         </section>
+
+        <section id="appointmentBooking" class="appointment-panel">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Demo booking</p>
+                    <h2>Doctor appointments</h2>
+                </div>
+                <span class="demo-badge">Demo only</span>
+            </div>
+
+            <p class="medical-disclaimer" role="note">
+                This local demo helps schedule fictional appointments. It does
+                not provide medical advice, diagnose symptoms, or handle
+                emergencies. Do not enter real patient information.
+            </p>
+
+            <p id="appointmentStateStatus" class="muted" role="status">
+                Appointment assistant: Ready
+            </p>
+
+            <section class="appointment-step" aria-labelledby="findDoctorTitle">
+                <h3 id="findDoctorTitle"><span>1</span> Find a doctor</h3>
+
+                <div class="form-grid filters-grid">
+                    <label>
+                        Speciality
+                        <select id="appointmentSpeciality">
+                            <option value="">Choose a speciality</option>
+                        </select>
+                    </label>
+
+                    <label>
+                        Location
+                        <input
+                            id="appointmentLocation"
+                            type="text"
+                            maxlength="120"
+                            placeholder="e.g. New Delhi"
+                            autocomplete="off"
+                        >
+                    </label>
+
+                    <label>
+                        Consultation mode
+                        <select id="appointmentMode">
+                            <option value="">Any mode</option>
+                            <option value="clinic">In person</option>
+                            <option value="video">Video</option>
+                        </select>
+                    </label>
+                </div>
+
+                <button id="searchDoctorsButton" type="button">
+                    Search doctors
+                </button>
+                <p id="doctorSearchStatus" role="status"></p>
+                <div id="doctorCards" class="doctor-grid" aria-live="polite"></div>
+            </section>
+
+            <section class="appointment-step" aria-labelledby="chooseTimeTitle">
+                <h3 id="chooseTimeTitle"><span>2</span> Choose date and time</h3>
+                <p id="selectedDoctorSummary" class="selection-summary">
+                    Select a doctor to continue.
+                </p>
+
+                <div class="inline-fields">
+                    <label>
+                        Appointment date
+                        <input id="appointmentDate" type="date">
+                    </label>
+                    <button id="loadAvailabilityButton" type="button" disabled>
+                        Show availability
+                    </button>
+                </div>
+
+                <p id="availabilityStatus" role="status"></p>
+                <div
+                    id="appointmentSlots"
+                    class="slot-grid"
+                    aria-label="Available appointment times"
+                ></div>
+                <p id="selectedSlotSummary" class="selection-summary">
+                    No time selected.
+                </p>
+            </section>
+
+            <section class="appointment-step" aria-labelledby="detailsTitle">
+                <h3 id="detailsTitle"><span>3</span> Demo patient details</h3>
+
+                <div class="form-grid">
+                    <label>
+                        Patient name
+                        <input
+                            id="patientName"
+                            type="text"
+                            maxlength="120"
+                            autocomplete="off"
+                            placeholder="Use a fictional name"
+                        >
+                    </label>
+
+                    <label>
+                        Phone number
+                        <input
+                            id="patientPhone"
+                            type="tel"
+                            maxlength="20"
+                            autocomplete="off"
+                            placeholder="Demo number only"
+                        >
+                    </label>
+
+                    <label>
+                        Age <span class="optional">(optional)</span>
+                        <input id="patientAge" type="number" min="0" max="120">
+                    </label>
+
+                    <label class="wide-field">
+                        Reason <span class="optional">(optional)</span>
+                        <textarea
+                            id="appointmentReason"
+                            rows="3"
+                            maxlength="500"
+                            placeholder="General consultation"
+                        ></textarea>
+                    </label>
+                </div>
+
+                <button id="bookAppointmentButton" type="button" disabled>
+                    Confirm demo appointment
+                </button>
+                <p id="appointmentActionStatus" role="status"></p>
+
+                <section id="appointmentConfirmation" class="confirmation-card" hidden>
+                    <h3>Appointment confirmed</h3>
+                    <p id="appointmentReference"></p>
+                    <div id="confirmedAppointmentDetails"></div>
+                </section>
+            </section>
+
+            <section class="appointment-step manage-appointment" aria-labelledby="manageTitle">
+                <h3 id="manageTitle"><span>4</span> Find or manage a booking</h3>
+
+                <div class="inline-fields lookup-fields">
+                    <label>
+                        Booking reference
+                        <input
+                            id="lookupReference"
+                            type="text"
+                            maxlength="80"
+                            autocomplete="off"
+                        >
+                    </label>
+                    <label>
+                        Demo phone number
+                        <input
+                            id="lookupPhone"
+                            type="tel"
+                            maxlength="20"
+                            autocomplete="off"
+                        >
+                    </label>
+                    <button id="lookupAppointmentButton" type="button">
+                        Find booking
+                    </button>
+                </div>
+
+                <p id="lookupStatus" role="status"></p>
+                <div id="lookupAppointmentDetails" class="appointment-details"></div>
+
+                <div id="manageAppointmentActions" class="manage-actions" hidden>
+                    <div class="inline-fields">
+                        <label>
+                            New date
+                            <input id="rescheduleDate" type="date">
+                        </label>
+                        <label>
+                            New start time
+                            <input id="rescheduleStartTime" type="time">
+                        </label>
+                        <button id="rescheduleAppointmentButton" type="button">
+                            Reschedule
+                        </button>
+                    </div>
+                    <button id="cancelAppointmentButton" class="danger-button" type="button">
+                        Cancel appointment
+                    </button>
+                    <p id="manageAppointmentStatus" role="status"></p>
+                </div>
+            </section>
+        </section>
     </main>
 
     <script src="app.js"></script>
